@@ -55,10 +55,76 @@
     z-index: 0;
   }
 
+  /* ─── CRYPTO TICKER ─── */
+  .crypto-ticker-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 101;
+    height: 36px;
+    background: var(--near-black);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+  }
+
+  .crypto-ticker-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.6rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--accent);
+    padding: 0 1rem;
+    white-space: nowrap;
+    border-right: 1px solid var(--border);
+    height: 100%;
+    display: flex;
+    align-items: center;
+    background: var(--near-black);
+    z-index: 2;
+    flex-shrink: 0;
+  }
+
+  .crypto-ticker-scroll {
+    display: flex;
+    align-items: center;
+    animation: cryptoscroll 40s linear infinite;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .crypto-ticker-bar:hover .crypto-ticker-scroll {
+    animation-play-state: paused;
+  }
+
+  @keyframes cryptoscroll {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+
+  .crypto-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0 1.5rem;
+    border-right: 1px solid var(--border);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.62rem;
+    letter-spacing: 0.05em;
+  }
+
+  .crypto-item .symbol { color: var(--text-muted); font-weight: 700; }
+  .crypto-item .price { color: var(--text-primary); }
+  .crypto-item .change { font-size: 0.58rem; font-weight: 700; }
+  .change.up { color: var(--accent); }
+  .change.down { color: #ff4d4d; }
+
   /* ─── NAV ─── */
   nav {
     position: fixed;
-    top: 0;
+    top: 36px;
     left: 0;
     right: 0;
     z-index: 100;
@@ -126,7 +192,7 @@
     display: flex;
     flex-direction: column;
     justify-content: center;
-    padding: 8rem 4rem 4rem 4rem;
+    padding: 10rem 4rem 4rem 4rem;
     position: relative;
     z-index: 2;
   }
@@ -795,6 +861,14 @@
 </head>
 <body>
 
+<!-- CRYPTO TICKER -->
+<div class="crypto-ticker-bar">
+  <div class="crypto-ticker-label">Live</div>
+  <div class="crypto-ticker-scroll" id="cryptoTicker">
+    <!-- populated by JS -->
+  </div>
+</div>
+
 <!-- NAV -->
 <nav>
   <div class="nav-logo">// On-Chain-Gang</div>
@@ -1054,6 +1128,69 @@
 </footer>
 
 <script>
+  // ─── LIVE CRYPTO TICKER ───
+  const COINS = [
+    { id: 'bitcoin',        symbol: 'BTC' },
+    { id: 'ethereum',       symbol: 'ETH' },
+    { id: 'solana',         symbol: 'SOL' },
+    { id: 'dogecoin',       symbol: 'DOGE' },
+    { id: 'shiba-inu',      symbol: 'SHIB' },
+    { id: 'cardano',        symbol: 'ADA' },
+    { id: 'avalanche-2',    symbol: 'AVAX' },
+    { id: 'chainlink',      symbol: 'LINK' },
+    { id: 'pepe',           symbol: 'PEPE' },
+    { id: 'the-open-network', symbol: 'TON' },
+  ];
+
+  function formatPrice(price) {
+    if (price >= 1000) return '$' + price.toLocaleString('en-US', { maximumFractionDigits: 0 });
+    if (price >= 1)    return '$' + price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    if (price >= 0.01) return '$' + price.toFixed(4);
+    return '$' + price.toFixed(8);
+  }
+
+  function buildTicker(coins) {
+    const ticker = document.getElementById('cryptoTicker');
+    // build two copies for seamless loop
+    let html = '';
+    for (let pass = 0; pass < 2; pass++) {
+      coins.forEach(c => {
+        const changeClass = c.change >= 0 ? 'up' : 'down';
+        const arrow = c.change >= 0 ? '▲' : '▼';
+        html += `
+          <div class="crypto-item">
+            <span class="symbol">${c.symbol}</span>
+            <span class="price">${formatPrice(c.price)}</span>
+            <span class="change ${changeClass}">${arrow} ${Math.abs(c.change).toFixed(2)}%</span>
+          </div>`;
+      });
+    }
+    ticker.innerHTML = html;
+  }
+
+  async function fetchPrices() {
+    const ids = COINS.map(c => c.id).join(',');
+    try {
+      const res = await fetch(
+        `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`
+      );
+      const data = await res.json();
+      const enriched = COINS.map(c => ({
+        ...c,
+        price:  data[c.id]?.usd ?? 0,
+        change: data[c.id]?.usd_24h_change ?? 0,
+      }));
+      buildTicker(enriched);
+    } catch (e) {
+      // fallback static display if API fails
+      const fallback = COINS.map(c => ({ ...c, price: 0, change: 0 }));
+      buildTicker(fallback);
+    }
+  }
+
+  fetchPrices();
+  setInterval(fetchPrices, 60000); // refresh every 60 seconds
+
   // Tag interaction
   document.querySelectorAll('.tag').forEach(tag => {
     tag.addEventListener('click', () => {
